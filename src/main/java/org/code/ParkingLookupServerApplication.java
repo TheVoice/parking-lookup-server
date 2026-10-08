@@ -2,13 +2,11 @@ package org.code;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,8 +33,8 @@ public class ParkingLookupServerApplication {
      * @param gratuit is the search limited to free spots
      * @param limit the number of parkings in the response (0-100)
      * @return list of nearby parking spots in JSON format
-     * @throws IOException
-     * @throws URISyntaxException
+     * @throws IOException the IOException
+     * @throws URISyntaxException the UTISyntaxException
      */
     @GetMapping("/parkings")
     public JsonNode getNearbyParkingsAsJson(
@@ -44,21 +42,21 @@ public class ParkingLookupServerApplication {
             @RequestParam(value = "longitude") Double longitude,
             @RequestParam(value = "gratuit", required = false, defaultValue = "false") Boolean gratuit,
             @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit) throws IOException, URISyntaxException {
-        JsonNode jsonNode = getJSONFromRegionalEndpoint(latitude, longitude, gratuit, limit);
-        return jsonNode;
+        return getJSONFromRegionalEndpoint(latitude, longitude, gratuit, limit);
     }
 
     private JsonNode getJSONFromRegionalEndpoint(Double latitude, Double longitude, Boolean gratuit, Integer limit) throws IOException, URISyntaxException {
 
         ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode rootNode = null;
+        JsonNode rootNode;
 
         if(limit > 100 || limit < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Limit parameter should fall in range of [0-100]");
         }
 
+        //Fetch all fields and add distance (in metres) to allow finding the closest spot
         String selectParameter = String.format("*, distance(meta_geo_point, geom'{\"type\": \"Point\",\"coordinates\":[%f,%f]}') as distance", longitude, latitude);
-        String whereParameter = gratuit ? String.format("gratuit = \"true\"") : "";
+        String whereParameter = gratuit ? "gratuit = \"true\"" : "";
 
         URI uri = new URI(targetMapDatabaseUrl);
         uri = UriComponentsBuilder.fromUri(uri)
@@ -78,18 +76,15 @@ public class ParkingLookupServerApplication {
         if(connection.getResponseCode() != 200) {
             throw new RuntimeException("Connection error");
         } else {
-            String rawData = "";
-            Scanner scanner = new Scanner(url.openStream());
-            try {
+            StringBuilder rawData = new StringBuilder();
+            try (Scanner scanner = new Scanner(url.openStream())) {
                 while (scanner.hasNext()) {
-                    rawData += scanner.nextLine();
+                    rawData.append(scanner.nextLine());
                 }
-            } finally {
-                scanner.close();
             }
 
 
-            rootNode = objectMapper.readTree(rawData);
+            rootNode = objectMapper.readTree(rawData.toString());
         }
 
         return rootNode.get("results");
